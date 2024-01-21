@@ -1,0 +1,3 @@
+REGEXP(re43){
+    a|b|c
+}

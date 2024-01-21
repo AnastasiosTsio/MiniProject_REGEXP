@@ -1,0 +1,317 @@
+/* Michaël PÉRIN, VERIMAG / Univ. Grenoble-Alpes / Polytech Grenoble, 2022
+
+ * Project 2022: Parsing regular expressions
+
+ * REG syntax:
+  	- See the README.md file for further explanations.
+    - Example:
+ 
+      REGEXP(re){
+        ( (a|b|$)*.c.(a|b) )*
+      }
+	  
+* Usage:
+	java -cp ./bin  regexp.RegexpParser -opath output/ -ipath regexp/ [-aut|-reformat]
+	   <reg_file without extension>
+*/
+
+PARSER_BEGIN(RegexpParser)
+package info3.regexp;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+
+import tracing.TRACING;
+
+public class RegexpParser {
+
+	// * Parser
+
+	public static Regexp from_file(String path_file) throws Exception {
+    	  return new RegexpParser(new BufferedReader(new FileReader(path_file))).Parse();
+    }
+
+	public static Regexp from_string(String input_string) throws Exception {
+	  return new RegexpParser(new java.io.StringReader(input_string)).Parse();
+  	}
+
+  	// * main
+
+    public static void main(String[] args) throws Exception {
+      // analysing arguments of the command line
+      String output_path = new String();
+      String input_path  = new String();
+      String file_name;
+      for(int i = 0 ; i + 1 < args.length ; i++) {
+        if ( args[i].equals("-opath") )
+          output_path = args[i+1];
+        if ( args[i].equals("-ipath") )
+      	  input_path = args[i+1];
+      	if( args[i].equals("-aut") )
+      	  Regexp.AUTOMATON = true;
+      	if( args[i].equals("-reformat") )  
+          Regexp.REFORMAT = true;
+      }
+      file_name = args[args.length-1];
+      // Parsing
+      Regexp regexp = from_file(input_path + file_name + ".reg");
+	  // EXPORT
+	  regexp.export(output_path, file_name);
+    }
+}
+PARSER_END(RegexpParser)
+
+
+/* LEXER */
+
+SKIP:  { " " | "\t" | "\n" | "\r" }
+
+TOKEN: { "REGEXP" }
+TOKEN: { "(" | ")" }
+TOKEN: { "{" | "}" }
+ 
+TOKEN : { ";" }
+TOKEN: { <UNDERSCORE: "_" > }
+TOKEN: { "$" }
+
+TOKEN: { "&" | "-" | "*" | "+" | "?" | "~" }
+
+// #NAME token are only used for defining other tokens
+
+TOKEN: { <#DIGIT: ["0"-"9"] > }
+TOKEN: { <#LOWERCASE: ["a"-"z"] > }
+TOKEN: { <#UPPERCASE: ["A"-"Z"] > }
+
+TOKEN: { <SYMBOL: <LOWERCASE> > }
+
+TOKEN:
+{<IDENT:
+ ( <UNDERSCORE> (<UPPERCASE> | <LOWERCASE> | <DIGIT> | <UNDERSCORE>)+ )
+ |
+ ( (<UPPERCASE> | <LOWERCASE>) (<UPPERCASE> | <LOWERCASE> | <DIGIT> | <UNDERSCORE>)+ )
+>}
+ 
+
+
+/* PARSER */
+
+// (GIVEN) Parse
+
+Regexp Parse() :
+{ Regexp re; }
+{
+  re = Seed(1) <EOF>
+	{ return re; }
+}
+
+
+// (GIVEN) Seed ::= REGEXP( name ) { Regexp }
+	
+Regexp Seed(int d) :
+{ TRACING.call(d,"Seed");
+  String name;
+  Regexp re;
+  Regexp re2;
+}
+{
+  "REGEXP"
+  	{ TRACING.consumed(d,"REGEXP"); }
+  "("
+  	{ TRACING.consumed(d,"("); }
+  name = Ident(d)
+  ")"
+  	{ TRACING.consumed(d,")"); }
+  "{"
+  	{ TRACING.consumed(d,"{"); }
+  re = Regexp(d+1)
+  "}"
+  	{ TRACING.consumed(d,"}"); } 
+	{ return re; }
+}
+
+// Règles de Grammaire (Syntaxe) :
+//   Regexp ::= Elem ('-'Elem)*
+//	 Elem ::= Term ('|'Term)*
+//	 Term ::= Factor ('.' Factor)*
+//	 Factor ::= PreFactor PostFactor
+//	 PreFactor ::= '-' PreFactor | Atom
+//	 PostFactor ::= ('*' | '+' | '?')*
+//	 Atom ::= BasicRegexp | '(' Regexp ')'
+//	 BasicRegexp ::= {} | epsilon | Symbol
+
+
+
+// Regexp ::= Elem ('-'Elem)*
+
+Regexp Regexp(int d) :
+{ TRACING.call(d,"Regexp");
+  Regexp elem, re ;
+  MinusOperator minOp ;
+}
+{
+  re = Elem(d+1)
+  { minOp = new MinusOperator();
+    minOp.add(re);
+  }
+  (
+    "-"
+    { TRACING.consumed(d,"-");}
+    elem =Elem(d+1)
+    { minOp.add(elem);
+      re = minOp ; }
+  )*
+  {return re ; }
+}
+
+
+//	 Elem ::= Term ('|'Term)*
+Regexp Elem(int d) :
+{ TRACING.call(d,"Elem");
+  Regexp term, re ;
+  Sum sum ;
+}
+{
+  re = Term(d+1)
+  { sum = new Sum();
+    sum.add(re);
+  }
+  (
+    "|"
+    { TRACING.consumed(d,"|");}
+    term =Term(d+1)
+    { sum.add(term);
+      re = sum ; }
+  )*
+  {return re ; }
+}
+
+
+// Term ::= Factor ('.' Factor)*
+Regexp Term(int d) :
+{TRACING.call(d,"Term");
+  Concat conc;
+  Regexp fact, re;
+}
+{
+  re = Factor(d+1)
+  { conc = new Concat();
+    conc.add(re);
+  }
+  (
+    "."
+    { TRACING.consumed(d,".");}
+    fact =Factor(d+1)
+    { conc.add(fact);
+      re = conc ;
+    }
+  )*
+  { return re ; }
+}
+
+// Factor ::= PreFactor PostFactor
+Regexp Factor(int d):
+{ TRACING.call(d,"Factor");
+  Regexp re ;
+}
+{
+  re = PreFactor(d+1)
+  (re = PostFactor(d+1,re))*
+  { return re; }
+}
+
+
+//	 PreFactor ::= '-' PreFactor | Atom
+Regexp PreFactor(int d):
+{TRACING.call(d,"PreFactor");
+Regexp re ;}
+{
+  "-"
+  re = PreFactor(d)
+  { TRACING.consumed(d,"-"); }
+  { return new MinusPrefixe(re); }
+|
+  re = Atom(d+1)
+  { return re; }
+}
+
+
+//	 PostFactor ::= ('*' | '+' | '?')*
+Regexp PostFactor(int d, Regexp re):
+{TRACING.call(d,"PostFactor");}
+{
+  "*"
+  {TRACING.consumed(d, "*");}
+  {return new Star(re);}
+|
+  "+"
+  {TRACING.consumed(d, "+");}
+  {return new Plus(re);}
+|
+  "?"
+  {TRACING.consumed(d, "?");}
+  {return new Optional(re);}
+}
+
+// Atom ::= BasicRegexp | '(' Regexp ')'
+Regexp Atom(int d):
+{TRACING.call(d,"Atom");
+  Regexp re ; }
+{
+  "("
+  {TRACING.consumed(d, "(");}
+  re = Regexp(d+1)
+  ")"
+  {TRACING.consumed(d, ")");}
+  { return re; }
+|
+  re = BasicRegexp(d+1)
+  { return re; }
+}
+
+// BasicRegexp ::= {} | epsilon | Symbol
+Regexp BasicRegexp(int d) :
+{ TRACING.call(d,"BasicRegexp");
+  String name;
+  Regexp re;
+}
+{
+  "{" "}"
+	{ TRACING.consumed(d,"{}"); }
+	{
+	  return Symbol.EMPTY;
+	}
+| "$"
+	{ TRACING.consumed(d,"$"); }
+	{
+	  return Symbol.EPSILON_REGEXP;
+	}
+| name = Symbol(d+1)
+	{ return new Symbol(name); }
+// TODO	
+}
+
+
+// (GIVEN) Ident
+
+String Ident(int d) :
+{ Token token; }
+{
+  token = <IDENT>
+	{
+	  TRACING.consumed(d,token.toString());
+	  return token.toString();
+	}   
+}
+
+
+// (GIVEN) Symbol
+
+String Symbol(int d) :
+{ Token token; }
+{
+  token = <SYMBOL>
+	{
+	  TRACING.consumed(d,token.toString());
+	  return token.toString();
+	}   
+}

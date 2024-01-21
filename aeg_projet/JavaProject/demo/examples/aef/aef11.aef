@@ -1,0 +1,4 @@
+AEF(A11){
+  -> w<b -a-> w.a <a -b-> w.a.b -a-> (w.a.b.a) -b-> w.a.b -b-> w ;
+  w.a.b.a -a-> w.a
+}

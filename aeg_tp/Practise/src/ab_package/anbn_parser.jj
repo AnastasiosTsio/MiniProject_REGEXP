@@ -1,0 +1,107 @@
+/* Michaël PÉRIN, VERIMAG / Univ. Grenoble-Alpes / Polytech Grenoble, december 2020
+
+A VERY SIMPLE PARSER that
+- recognizes words of the language { a^n.b^n | n in Nat }
+- computes n
+
+USAGE
+- see Main.java
+*/
+
+
+PARSER_BEGIN(AnBn_parser)
+
+package ab_package;
+import ab_package.AsciiFont;
+
+public class AnBn_parser
+{
+  // * Parser
+
+  public static int parse(java.io.StringReader reader) throws ParseException
+  {
+    return new AnBn_parser(reader).P();
+  }
+
+  public static int parse_string(String input_string)
+  {
+    try
+    {
+      java.io.StringReader reader = new java.io.StringReader(input_string);
+      return parse(reader);
+    }
+    catch (Throwable e)
+    { // JavaCC throws Error objects!
+      System.out.println("AnBn_parser error " + e.getMessage());
+      return -1;
+    }
+  }
+
+}
+PARSER_END(AnBn_parser)
+
+
+/* TOKENS */
+
+SKIP : { " " }
+
+TOKEN : { "a" | "b" }
+
+
+/* A PARSER of the langage { a^n.b^n | n in Nat }
+
+** The grammar
+  P ::= S . EOF
+  S ::=
+      | "a" . S ."b"
+      | ""
+
+** The parser with computations of n
+*/
+
+int P() : { int n; }
+{
+  n= S()
+  eof()
+  { return n; }
+}
+
+int S() : { int n; }
+{
+     a()
+  n= S()
+     b()
+  { return n+1; }
+
+| epsilon()
+  { return 0; }
+}
+
+/* USER FRIENDLY PARSER
+   Additional non-terminals for re-printing tokens.
+*/
+
+void a () : { }
+{
+  "a" { AsciiFont.green("a"); }
+}
+
+void b() : { }
+{
+  "b" { AsciiFont.green("b"); }
+/* TRY with the friendly rule below */
+  | { AsciiFont.yellow("b"); }
+}
+
+void epsilon() : { }
+{
+  /*epsilon*/ { AsciiFont.gray("ε"); }
+}
+
+void eof() : {}
+{
+  <EOF> { }
+/* TRY with the friendly rules below */
+  | "b" eof() { AsciiFont.red("b"); }
+  | "a" eof() { AsciiFont.red("a"); }  
+}

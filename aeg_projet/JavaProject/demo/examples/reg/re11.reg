@@ -1,0 +1,3 @@
+REGEXP(re11){
+    a|b|c
+}

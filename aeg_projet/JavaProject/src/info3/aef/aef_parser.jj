@@ -1,0 +1,439 @@
+/* Michaël PÉRIN, VERIMAG / Univ. Grenoble-Alpes / Polytech Grenoble, december 2020
+
+  Project 2020 : Graphical representation of Finite Automata 
+  by translation in dot format for https://graphviz.org
+  of automata provided in AEF syntax
+
+  AEF syntax:
+     See the README.md file for further explanations.
+
+  Example:
+      AEF(A){ ->1-a->2-a,b->(3)-a->(3) ; 1-b->4-a,b->4 }
+
+  Usage: java -cp ./bin  aef.AEF_Parser -opath output/ -ipath aef/  [-reformat|-dot] <aef_file without extension>
+*/
+
+PARSER_BEGIN(AEF_Parser)
+package info3.aef;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+
+import tracing.TRACING;
+
+public class AEF_Parser {
+
+	// * Parser
+
+	public static Aef from_file(String path_file) throws Exception {
+    	  return new AEF_Parser(new BufferedReader(new FileReader(path_file))).Parse();
+    }
+
+	public static Aef from_string(String input_string) throws Exception {
+	  return new AEF_Parser(new java.io.StringReader(input_string)).Parse();
+  	}
+
+  	// * main
+
+    public static void main(String[] args) throws Exception {
+      // analysing arguments of the command line
+      String output_path = new String();
+      String input_path  = new String();
+      String file_name;
+      for(int i=0 ; i+1<args.length ; i++) {
+        if (args[i].equals("-opath"))
+          output_path = args[i+1];
+        if (args[i].equals("-ipath"))
+      	  input_path = args[i+1];
+        if( args[i].equals("-dot") )
+      	  Aef.DOT_EXPORT = true;
+        if (args[i].equals("-reformat") )
+          Aef.REFORMAT = true;
+      }
+      file_name = args[args.length-1];
+      // PARSING
+      Aef aef = from_file(input_path + file_name + ".aef");
+      // EXPORT
+	  aef.export(output_path, file_name);
+    }
+}
+PARSER_END(AEF_Parser)
+
+
+/* LEXER */
+
+SKIP:  { " " | "\t" | "\n" | "\r" }
+
+TOKEN: { "AEF" }
+TOKEN: { "(" | ")" }
+TOKEN: { "{" | "}" }
+
+TOKEN : { "," | ";" }
+TOKEN : { "'" }
+TOKEN : { <RIGHT_ARROW_END: "->" > }
+TOKEN : { <LEFT_ARROW_END: "<-" > }
+TOKEN: { "<" | "-" }
+
+// #NAME token are only used for defining other tokens
+
+TOKEN: { <#DIGIT: ["0"-"9"] > }
+TOKEN: { <INT: (<DIGIT>)+ > }
+
+TOKEN: { <#LOWERCASE: ["a"-"z"] > }
+TOKEN: { <#UPPERCASE: ["A"-"Z"] > }
+TOKEN: { <IDENT: (<UPPERCASE> | <LOWERCASE> | <DIGIT>) (<UPPERCASE> | <LOWERCASE> | <DIGIT> | "_" | "." )* >}
+
+
+/* PARSER */
+
+Aef Parse() :
+{ Aef aef; }
+{
+  aef = Seed(1) <EOF>
+	{ return aef; }
+}
+
+	
+Aef Seed(int d) :
+{ TRACING.call(d,"Seed");
+   Token token;
+   Aef aef = new Aef();
+}   
+{
+  "AEF" "(" token = <IDENT> ")" "{" Path_Plus(d+1, aef) "}" 
+	{
+	  aef.set_name(token.toString());
+	  return aef;
+	}
+}
+
+
+void Path_Plus(int d, Aef aef) :
+{ TRACING.call(d,"Path_Plus"); }
+{
+  Path(d+1, aef)
+  More_Paths(d+1, aef)
+}
+
+
+void More_Paths(int d, Aef aef) :
+{ TRACING.call(d,"More_Paths"); }
+{
+  ";"
+  Path_Plus(d+1, aef)
+|
+  /*epsilon*/
+	{ }
+}
+
+
+void Path(int d, Aef aef) :
+{ String state; TRACING.call(d,"Path"); }
+{
+  state = Possibly_Initial_State(d+1, aef)
+  Step_Star(d+1, aef,state)
+|
+  /*epsilon*/
+	{ }
+}
+
+
+String Possibly_Initial_State(int d, Aef aef) :
+{ TRACING.call(d,"Possibly_Initial_State");
+   String state;
+}
+{
+  <RIGHT_ARROW_END>
+  state = AEF_State(d+1, aef)
+	{
+	  aef.add_initial_state(state);
+	  return state;
+	}
+| state = AEF_State(d+1, aef)
+	{ return state; }
+}
+
+
+String AEF_State(int d, Aef aef):
+{ String state; }
+{
+  state = Structured_State(d+1, aef)
+  Opt_Loop(d+1, aef,state)
+  	{
+  	  aef.state(state);
+  	  return state;
+  	}
+}
+
+
+void Step_Star(int d, Aef aef, String source_state) :
+{ String target_state; TRACING.call(d,"Step_Star"); }
+{
+  target_state = Step(d+1, aef, source_state)
+  Step_Star(d+1, aef,target_state)
+  	{ }
+| /*epsilon*/
+  	{ }
+}
+
+
+String Step(int d, Aef aef, String previous_state) :
+{ int arrow_type;
+  StringBuilder symbols = new StringBuilder();
+  String state;
+  TRACING.call(d,"Step");
+}
+{
+  arrow_type = Arrow(d+1, symbols)
+  state = AEF_State(d+1, aef)
+	{
+	  switch(arrow_type) {
+	  	case 0: aef.add_transition(state,symbols.toString(),previous_state); break;
+	  	case 1: aef.add_transition(previous_state,symbols.toString(),state); break;
+	  	case 2:
+	  		aef.add_transition(state,symbols.toString(),previous_state);
+	  		aef.add_transition(previous_state,symbols.toString(),state); break;
+	  	default: break;
+	  }
+	  return state;
+	}
+}
+
+
+void Opt_Loop(int d, Aef aef, String state) :
+{ String symbols; TRACING.call(d,"Opt_Loop"); }
+{
+  "<"
+  symbols = Symbol_Plus(d+1)
+	{ aef.add_transition(state, symbols, state); }
+|
+  /*epsilon*/
+	{ }
+}
+
+int Arrow(int d, StringBuilder symbols) :
+{ String string; int arrow_type; TRACING.call(d,"Arrow");}
+{
+  <LEFT_ARROW_END>
+  string = Symbol_Star(d+1)
+  arrow_type = Left_or_Double_Arrow_end(d+1)
+	{
+	  symbols.append(string);
+	  return arrow_type;
+	}
+|
+  "-"
+  string = Symbol_Star(d+1)
+  <RIGHT_ARROW_END>
+	{
+	  symbols.append(string);
+	  return 1;
+	}
+}
+
+
+int Left_or_Double_Arrow_end(int d) :
+{ }
+{
+  <RIGHT_ARROW_END> { return 2; }
+|
+  "-" { return 0; }
+}
+
+
+String Symbol_Star(int d) :
+{ String symbols; TRACING.call(d,"Symbol_Star"); }
+{
+  symbols = Symbol_Plus(d+1)
+	{ return symbols; }
+| /**/
+	{ return ""; }
+}
+
+
+String Symbol_Plus(int d) :
+{ String symbol, more_symbols; TRACING.call(d,"Symbol_Plus"); }
+{
+  symbol = Symbol(d+1)
+  more_symbols = More_Symbols(d+1)
+	{ return symbol + more_symbols; }
+}
+
+
+String More_Symbols(int d) :
+{ String symbols; TRACING.call(d,"More_Symbols"); }
+{
+  ","
+  symbols = Symbol_Plus(d+1)
+	{ return "," + symbols; }
+|
+  /*epsilon*/
+    { return ""; }
+}
+
+
+String Symbol(int d) :
+{ Token token; TRACING.call(d,"Symbol"); }
+{
+  token = <IDENT>
+  	{ return token.toString(); }
+}
+
+
+String Structured_State(int d, Aef aef) :
+{ TRACING.call(d,"AEF_State");
+   String state, final_state;
+}
+{
+ (
+   state = Simple_State(d+1)
+   final_state = More_Equiv_States(d+1, state)
+ |
+   state = Set_of_States(d+1)
+   final_state = More_Equiv_States(d+1, state)
+ |
+   "("
+   state = State(d+1)
+   final_state = Acceptor_or_Tuple(d+1, aef,state)
+   ")"
+ )
+   { return final_state; }
+}
+
+
+String Acceptor_or_Tuple(int d, Aef aef, String previous_state) :
+{ String state, final_state; TRACING.call(d,"Acceptor_or_Tuple"); }
+{  ","
+  state = State(d+1)
+  final_state = More_States(d+1, previous_state + "," + state)
+  	{ return "(" + final_state + ")"; }
+|
+  "="
+  state = State(d+1)
+  final_state = More_Equiv_States(d+1, previous_state + "=" + state)
+	{
+	  aef.add_accepting_state(final_state);
+	  return final_state;
+	}
+|
+  /*epsilon*/
+	{
+	  aef.add_accepting_state(previous_state);
+	  return previous_state;
+	}
+}
+
+
+String Equiv_States(int d) :
+{ String state, final_state; TRACING.call(d,"Equiv_States"); }
+{
+  state = State(d+1)
+  final_state = More_Equiv_States(d+1, state)
+	{ return final_state; }
+}
+
+
+String More_Equiv_States(int d, String previous_state) :
+{ String state, final_state; TRACING.call(d,"More_Equiv_States"); }
+{
+  "="
+  state = State(d+1)
+  final_state = More_Equiv_States(d+1, previous_state + "=" + state)
+	{ return final_state; }
+|
+  /*epsilon*/
+	{ return previous_state; }
+}
+
+
+String State(int d) :
+{ String state; TRACING.call(d,"State"); }
+{
+  (    state = Simple_State(d+1)
+  |
+  	state = Set_of_States(d+1)
+  |
+    state = Tuple_of_States(d+1)
+  )
+  { return state; }
+}
+
+
+String Simple_State(int d) :
+{ Token token; String primes; TRACING.call(d,"Simple_State"); }
+{
+  (    token = <INT>
+  |
+    token = <IDENT>
+  )
+  primes = Primed(d+1)
+  { return token.toString() + primes; }
+}
+
+
+String Primed(int d) :
+{ String primes; }
+{
+  "'"
+  primes = Primed(d+1)
+	{ return "'" + primes; }
+|
+  /*epsilon*/
+	{ return ""; }
+}
+
+
+String Set_of_States(int d) :
+{ String states; TRACING.call(d,"Set_of_States"); }
+{
+  "{"
+  states = Some_States(d+1)
+  "}"
+	{ return "{" + states + "}"; }
+}
+
+
+String Tuple_of_States(int d) :
+{ String states; TRACING.call(d,"Tuple_of_States"); }
+{
+  "("
+  states = At_Least_Two_States(d+1)
+  ")"
+	{ return "(" + states + ")"; }
+}
+
+
+String At_Least_Two_States(int d) :
+{ String state1, state2, final_state; TRACING.call(d,"At_Least_Two_States"); }
+{
+  state1 = State(d+1)
+  ","
+  state2 = State(d+1)
+  final_state = More_States(d+1, state1 + "," + state2)
+	{ return final_state; }
+}
+
+
+String Some_States(int d) :
+{ String state, final_state; TRACING.call(d,"Some_States"); }
+{
+  state = State(d+1)
+  final_state = More_States(d+1, state)
+	{ return final_state; }
+|
+  /*epsilon*/
+	{ return ""; }
+}
+
+
+String More_States(int d, String previous_state) :
+{ String state, final_state; TRACING.call(d,"More_States"); }
+{
+  ","
+  state = State(d+1)
+  final_state = More_States(d+1,previous_state + "," + state)
+	{ return final_state; }
+|
+  /*epsilon*/
+	{ return previous_state; }
+}

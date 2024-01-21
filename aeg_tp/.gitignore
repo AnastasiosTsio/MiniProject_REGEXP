@@ -1,0 +1,8 @@
+# ECLIPSE
+bin/
+.metadata/
+.recommenders/
+.settings/
+
+# untracked
+_*

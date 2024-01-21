@@ -1,0 +1,6 @@
+REGEXP(re00){
+  var _ := a | b ;
+  var e1 := a.b | $ ;
+  var e2 := e1._*.e1 ;
+  -e2+ & -(a&e1*) ;
+}

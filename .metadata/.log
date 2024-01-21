@@ -1,0 +1,13 @@
+!SESSION 2023-01-25 14:22:36.461 -----------------------------------------------
+eclipse.buildId=4.26.0.20221201-1200
+java.version=17.0.5
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=linux, ARCH=x86_64, WS=gtk, NL=en_US
+Framework arguments:  -product org.eclipse.epp.package.java.product
+Command-line arguments:  -os linux -ws gtk -arch x86_64 -product org.eclipse.epp.package.java.product -data g12
+
+!ENTRY ch.qos.logback.classic 1 0 2023-01-25 14:22:39.908
+!MESSAGE Activated before the state location was initialized. Retry after the state location is initialized.
+
+!ENTRY ch.qos.logback.classic 1 0 2023-01-25 14:22:43.999
+!MESSAGE Logback config file: /home/noah/Documents/INF03/S5/A&G Parser/g12/.metadata/.plugins/org.eclipse.m2e.logback/logback.2.1.0.20221015-0744.xml

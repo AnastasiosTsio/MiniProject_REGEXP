@@ -1,0 +1,3 @@
+REGEXP(re44){
+    a.a|b.b|c.c
+}

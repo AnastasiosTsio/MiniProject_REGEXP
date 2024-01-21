@@ -1,0 +1,8 @@
+Grammar(G30){
+  L1 ::= "a" . "b" . "c" . L1
+       | ""
+}
+
+L1();
+L1(abc);
+L1(abcabc);

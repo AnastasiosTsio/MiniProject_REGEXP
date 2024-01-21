@@ -1,0 +1,229 @@
+/* Michaël PÉRIN, VERIMAG / Univ. Grenoble-Alpes / Polytech Grenbole, december 2020
+
+  Parsing and reconstructing integer or real numbers.
+
+  A simple case where inherited attributes (ie. non-terminal functions with parameters) are needed.
+*/
+
+
+PARSER_BEGIN(Number_parser)
+
+package number_package;
+
+import number_package.Number;
+import number_package.Inum;
+import number_package.Rnum;
+
+
+public class Number_parser{
+
+  // * Parser
+
+	public static Number parse(java.io.StringReader reader) throws ParseException {
+	    return new Number_parser(reader).Number();
+	}
+
+	public static Number parse_from_string(String input_string) {
+	  try {
+	      java.io.StringReader reader = new java.io.StringReader(input_string) ;
+	      return parse(reader);
+	  } catch (Throwable e) { // JavaCC throws Error objects!
+	      System.out.println("Number_parser error " + e.getMessage());
+	      return new Inum(0);
+	  }
+	}
+
+    // * For testing
+
+  	static int check(boolean condition) {
+	    if (condition) {
+		  System.out.println(" : correct");
+		  return 1;
+	    } else {
+		  System.out.println(" : INCORRECT");
+		  return 0;
+	    }
+  	}
+
+	static int test_parser(String input_string, Number expected) throws ParseException {
+		System.out.printf("\nparse_string(\"%s\"):",input_string);
+    Number n = parse_from_string(input_string);
+	  System.out.printf("\nparse_string(\"%s\") = %s",input_string, n.toString());
+	  return check( n.eq(expected) );
+	}
+
+
+	static void test() throws ParseException {
+	  System.out.println("\nNOM Prénom <---- à modifier dans la fonction number_parser.jj:test()\n");
+	  int passed=0;
+	  int total=0;
+	  total++ ; passed += test_parser("0",new Inum(0));
+	  total++ ; passed += test_parser("1", new Inum(1));
+	  total++ ; passed += test_parser("0012", new Inum(12));
+	  total++ ; passed += test_parser("123", new Inum(123));
+
+    /*
+	  total++ ; passed += test_parser("0.0", new Rnum(0.0));
+	  total++ ; passed += test_parser(".0", new Rnum(.0));
+	  total++ ; passed += test_parser(".1", new Rnum(.1));
+	  total++ ; passed += test_parser(".999",new Rnum(.999));
+
+		// >>> AJOUTEZ VOS TESTS ICI <<<
+		*/
+
+	  System.out.println("\n\nTEST : " + passed + "/" + total);
+	}
+
+	// * USAGE AS COMMAND LINE
+	//    java -cp ./bin number_package.Number_parser
+
+  public static void main(String[] args) throws ParseException {
+	  test();
+	}
+
+}
+
+PARSER_END(Number_parser)
+
+
+SKIP: { " " }
+
+TOKEN: { "-" | "." | "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" }
+
+
+
+/* Digit PARSER */
+
+int Digit() : {  }
+{ "0"   {  return 0; }
+| "1"   {  return 1; }
+| "2"   {  return 2; }
+| "3"   {  return 3; }
+| "4"   {  return 4; }
+| "5"   {  return 5; }
+| "6"   {  return 6; }
+| "7"   {  return 7; }
+| "8"   {  return 8; }
+| "9"   {  return 9; }
+}
+
+
+/* Natural numbers PARSER */
+
+int Nat() : { int d,n;  }
+{ d = Digit()
+  n = Some_Digits(d)
+    { return n; }
+}
+
+int Some_Digits( int i) : { int d,n;  }
+{ d = Digit()
+  n = Some_Digits(d)
+    { return i*10+n; }
+
+| //epsilon
+    { 
+		  return i;
+    }
+}
+
+
+/* Integer PARSER */
+
+int Integer() : { int n;  }
+{ "-" 
+  n = Nat()
+    { return n; }
+| n = Nat()
+    { return n; }
+}
+
+
+/* Number (Integer or Real) PARSER
+
+** Grammar
+
+Number ::=
+ | Integer Opt_Decimal_Part
+ |         "." Decimals
+
+Opt_Decimal_Part ::=
+ | "." Decimals
+ | epsilon
+
+Decimals ::=
+ | Digit . Opt_Decimals
+
+Opt_Decimals ::=
+ | Decimals
+ | epsilon
+
+** Parser with computations
+
+    THE BAD IDEA
+
+    The real number corresponding to the string "0.987654321"
+    could be built by constructing two integers, the numerator and the denominator,
+    of the fraction 987654321 / 1000000000 then performing the division
+    (after casting into double).
+    Constructing numerator and denominator would be a bad idea because
+    the size of the numerator and denominator can exceed the size of machine integers.
+
+   The GOOD IDEA /computations that are insensitive to the size of integer/
+
+      Use Horner schema, the decimal part of 0.765 = (7 + (6 + 5/10) /10) /10
+
+      with the appropriate cast of int into double
+        0.7 = (double) 7 / 10.0
+
+ */
+
+Number Number() : { int i; OptDouble od; double d;  }
+{	
+	
+  i  = Integer()
+  od = Opt_Decimal_Part()
+    { if (od.available)
+        { return new Rnum(od); }
+      else
+        { return new Inum(i); }
+    }
+
+| "." 
+  d = Decimal_Plus()
+    { return new Inum(i); }
+
+}
+
+
+OptDouble Opt_Decimal_Part() : { double d;  }
+{ "."  
+  d = Decimal_Plus()
+    { return new ........................; }
+
+| //epsilon
+    { 
+      return new ......................;
+    }
+}
+
+
+double Decimal_Plus() : { int i; double d;  }
+{
+  i = Digit()
+  d = Decimal_Star()
+     { return ........................................; }
+}
+
+
+double Decimal_Star() : { double d;  }
+{
+  d = Decimal_Plus()
+     { return ..; }
+
+| //epsilon
+     { 
+       return ......;
+     }
+}
+
