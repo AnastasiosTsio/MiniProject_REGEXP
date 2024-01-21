@@ -11,7 +11,7 @@ Part of the course __"Parsers which Compute"__
 Noah Kohrs
 Anastasios Tsiompanidis
 
-## [Project 2022](sujet/2022/) - REGEXP to AEF: Parsing REGEXP + Thompson constructions
+## [Project 2022](aeg_projet/sujet/2022/) - REGEXP to AEF: Parsing REGEXP + Thompson constructions
 
 - A syntax for regular expression
 - A parser
